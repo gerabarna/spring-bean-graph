@@ -10,15 +10,17 @@ import org.springframework.jmx.export.annotation.ManagedOperationParameter;
 import org.springframework.jmx.export.annotation.ManagedOperationParameters;
 import org.springframework.jmx.export.annotation.ManagedResource;
 import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import guru.nidi.graphviz.attribute.Color;
+import guru.nidi.graphviz.attribute.Label;
+import guru.nidi.graphviz.attribute.Style;
 import guru.nidi.graphviz.engine.Format;
 import guru.nidi.graphviz.engine.Graphviz;
 import guru.nidi.graphviz.model.Graph;
@@ -71,27 +73,57 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
             }
 
             int maxDepth = rootNodes.values().stream().mapToInt(TRAVERSAL::getDepth).max().orElse(0);
+            int width = rootNodes.values().stream().map(BeanNode::getName).mapToInt(name -> name.length() + 10).sum();
 
             Format format = Format.SVG;
             Graphviz.fromGraph(graph)
-                    .height(maxDepth*30)
-                    .width(rootNodes.size() * 50)
+                    .height(maxDepth * 30)
+                    .width(width)
                     .render(format)
-                    .toFile(Paths.get(path+"."+format.name()).toAbsolutePath().toFile());
+                    .toFile(Paths.get(path + "." + format.name()).toAbsolutePath().toFile());
         } catch (IOException e) {
             LOGGER.error("Failed to write file at=" + path, e);
         }
     }
 
     private Node convert(BeanNode beanNode) {
-        Node node = node(beanNode.getName());
+        Node node = node(beanNode.getName()).with(Label.html(toHtml(beanNode)));
+
+        if (beanNode.isPrototype()) {
+            node = node.with(Color.LIGHTGRAY);
+        }
+
+        if (beanNode.isLazyInit()) {
+            node = node.with(Style.DOTTED);
+        }
 
         for (BeanNode dependent : TRAVERSAL.getChildren(beanNode)) {
-            convert(dependent);
-            node = node.link(dependent.getName());
+            node = node.link(convert(dependent));
         }
 
         return node;
+    }
+
+
+    public String toHtml(BeanNode node) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<b>").append(node.getName()).append("</b>");
+
+        String simpleName = last(node.getBeanClassName().split("\\."));
+        if (simpleName != null && !simpleName.equalsIgnoreCase(node.getName())) {
+            sb.append("<br/>").append(simpleName);
+        }
+        return sb.toString();
+    }
+
+    private void appendNotNull(StringBuilder sb, String simpleName) {
+        if (simpleName != null) {
+            sb.append("<br/>").append(simpleName);
+        }
+    }
+
+    public static <T> T last(T[] values) {
+        return ObjectUtils.isEmpty(values) ? null : values[values.length - 1];
     }
 
 }

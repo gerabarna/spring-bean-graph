@@ -34,7 +34,7 @@ import static guru.nidi.graphviz.model.Factory.node;
 public class GraphVizService implements ApplicationListener<ContextRefreshedEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BeanGraphService.class);
-    public static final BeanGraph.Traversal TRAVERSAL = BeanGraph.Traversal.DEPENDENCY_TO_DEPENDENT;
+    public BeanGraph.Traversal traversal = BeanGraph.Traversal.DEPENDENT_TO_DEPENDENCY;
 
     @Autowired
     private BeanGraphService beanGraphService;
@@ -60,7 +60,7 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
 
     private void exportBeanGraph(BeanGraph beanGraph, String path) {
         try {
-            Map<String, BeanNode> rootNodes = beanGraph.getRootNodes(TRAVERSAL);
+            Map<String, BeanNode> rootNodes = beanGraph.getRootNodes(traversal);
 
             List<Node> nodes = rootNodes.values().stream()
                     .map(this::convert)
@@ -72,12 +72,12 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
                 graph = graph.with(node);
             }
 
-            int maxDepth = rootNodes.values().stream().mapToInt(TRAVERSAL::getDepth).max().orElse(0);
-            int width = rootNodes.values().stream().map(BeanNode::getName).mapToInt(name -> name.length() + 10).sum();
+            int maxDepth = rootNodes.values().stream().mapToInt(traversal::getDepth).max().orElse(0);
+            int width = rootNodes.values().stream().map(BeanNode::getName).mapToInt(name -> name.length() + 4).sum();
 
             Format format = Format.SVG;
             Graphviz.fromGraph(graph)
-                    .height(maxDepth * 30)
+                    .height(maxDepth * 20)
                     .width(width)
                     .render(format)
                     .toFile(Paths.get(path + "." + format.name()).toAbsolutePath().toFile());
@@ -97,7 +97,7 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
             node = node.with(Style.DOTTED);
         }
 
-        for (BeanNode dependent : TRAVERSAL.getChildren(beanNode)) {
+        for (BeanNode dependent : traversal.getChildren(beanNode)) {
             node = node.link(convert(dependent));
         }
 
@@ -116,14 +116,11 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
         return sb.toString();
     }
 
-    private void appendNotNull(StringBuilder sb, String simpleName) {
-        if (simpleName != null) {
-            sb.append("<br/>").append(simpleName);
-        }
-    }
-
     public static <T> T last(T[] values) {
         return ObjectUtils.isEmpty(values) ? null : values[values.length - 1];
     }
 
+    public void setTraversal(BeanGraph.Traversal traversal) {
+        this.traversal = traversal;
+    }
 }

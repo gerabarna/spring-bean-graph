@@ -1,6 +1,5 @@
 package hu.gerab.spring.bean.graph;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -14,29 +13,6 @@ public class BeanGraph {
                 throw new IllegalStateException("Duplicate key=" + a);
             }, TreeMap::new);
 
-    public interface Traversal {
-
-        Traversal DEPENDENCY_TO_DEPENDENT = BeanNode::getDependendents;
-        Traversal DEPENDENT_TO_DEPENDENCY = BeanNode::getDependendencies;
-
-        Collection<BeanNode> getChildren(BeanNode parent);
-
-        default int getDepth(BeanNode root) {
-            return getChildren(root).stream().mapToInt(this::getDepth).max().orElse(0);
-        }
-
-        default Traversal invert() {
-            return this == DEPENDENCY_TO_DEPENDENT ? DEPENDENT_TO_DEPENDENCY : DEPENDENCY_TO_DEPENDENT;
-        }
-
-        default boolean isRoot(BeanNode node) {
-            return invert().getChildren(node).isEmpty();
-        }
-
-        default boolean isLeaf(BeanNode node) {
-            return getChildren(node).isEmpty();
-        }
-    }
 
     private final Map<String, BeanNode> beanNameToNodeMap;
 
@@ -52,5 +28,25 @@ public class BeanGraph {
         return beanNameToNodeMap.values().stream()
                 .filter(traversal::isLeaf)
                 .collect(THROWING_TREE_MAP_COLLECTOR);
+    }
+
+    public int getWidth(Traversal traversal) {
+        return getWidth(getRootNodes(traversal));
+    }
+
+    public static int getWidth(Map<String, BeanNode> rootNodes) {
+        return rootNodes.values().stream().map(BeanNode::getName).mapToInt(name -> name.length() + 4).sum();
+    }
+
+    public int getDepth(Traversal traversal) {
+        return getDepth(getRootNodes(traversal), traversal);
+    }
+
+    public static int getDepth(Map<String, BeanNode> rootNodes, Traversal traversal) {
+        return rootNodes.values().stream().mapToInt(traversal::getDepth).max().orElse(0);
+    }
+
+    public DirectedBeanGraph direct(Traversal traversal) {
+        return new DirectedBeanGraph(this, traversal);
     }
 }

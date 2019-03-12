@@ -12,8 +12,8 @@ public class BeanNode {
 
     private BeanDefinition beanDefinition;
     private String name;
-    private TreeSet<BeanNode> dependendencies = new TreeSet<>(BEAN_NODE_NAME_COMPARATOR);
-    private TreeSet<BeanNode> dependendents = new TreeSet<>(BEAN_NODE_NAME_COMPARATOR);
+    private TreeSet<BeanNode> dependencies = new TreeSet<>(BEAN_NODE_NAME_COMPARATOR);
+    private TreeSet<BeanNode> dependents = new TreeSet<>(BEAN_NODE_NAME_COMPARATOR);
 
     public BeanNode(BeanDefinition beanDefinition, String beanDefinitionName) {
         this.beanDefinition = beanDefinition;
@@ -26,34 +26,32 @@ public class BeanNode {
     }
 
     boolean isRoot() {
-        return dependendencies.isEmpty();
+        return dependencies.isEmpty();
     }
 
     boolean isLeaf() {
-        return dependendents.isEmpty();
+        return dependents.isEmpty();
     }
 
     public void addDependent(BeanNode node) {
-        dependendents.add(node);
+        dependents.add(node);
     }
 
     public void addDependency(BeanNode node) {
-        dependendencies.add(node);
+        dependencies.add(node);
     }
 
-    public TreeSet<BeanNode> getDependendencies() {
-        return dependendencies;
+    public TreeSet<BeanNode> getDependencies() {
+        return dependencies;
     }
 
-    public TreeSet<BeanNode> getDependendents() {
-        return dependendents;
+    public TreeSet<BeanNode> getDependents() {
+        return dependents;
     }
 
     public String getName() {
         return name;
     }
-
-
 
     protected BeanDefinition getBeanDefinition() {
         return beanDefinition;

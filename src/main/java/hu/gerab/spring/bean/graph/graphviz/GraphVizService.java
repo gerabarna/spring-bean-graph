@@ -1,4 +1,4 @@
-package hu.gerab.spring.bean.graph;
+package hu.gerab.spring.bean.graph.graphviz;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,9 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.ObjectUtils;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import guru.nidi.graphviz.attribute.Color;
@@ -23,9 +24,16 @@ import guru.nidi.graphviz.attribute.Label;
 import guru.nidi.graphviz.attribute.Style;
 import guru.nidi.graphviz.engine.Format;
 import guru.nidi.graphviz.engine.Graphviz;
+import guru.nidi.graphviz.engine.Renderer;
 import guru.nidi.graphviz.model.Graph;
 import guru.nidi.graphviz.model.Node;
+import hu.gerab.spring.bean.graph.BeanGraph;
+import hu.gerab.spring.bean.graph.BeanGraphService;
+import hu.gerab.spring.bean.graph.BeanNode;
+import hu.gerab.spring.bean.graph.DirectedBeanGraph;
+import hu.gerab.spring.bean.graph.Traversal;
 
+import static guru.nidi.graphviz.engine.Format.SVG;
 import static guru.nidi.graphviz.model.Factory.graph;
 import static guru.nidi.graphviz.model.Factory.node;
 
@@ -34,7 +42,7 @@ import static guru.nidi.graphviz.model.Factory.node;
 public class GraphVizService implements ApplicationListener<ContextRefreshedEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BeanGraphService.class);
-    public BeanGraph.Traversal traversal = BeanGraph.Traversal.DEPENDENT_TO_DEPENDENCY;
+    public Traversal traversal = Traversal.DEPENDENT_TO_DEPENDENCY;
 
     @Autowired
     private BeanGraphService beanGraphService;
@@ -48,9 +56,8 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
     public void createGraph(String pathWithoutExt) {
         try {
             LOGGER.info("Creating bean graph...");
-            BeanGraph beanGraph = beanGraphService.getBeanGraph(".*org\\.springframework.*", ".*hu\\.gerab\\.spring.*");
-            exportBeanGraph(beanGraph, pathWithoutExt);
-            LOGGER.info("Created bean graph");
+            BeanGraph beanGraph = beanGraphService.getBeanGraph("org.springframework", "hu.gerab.spring");
+            exportBeanGraph(beanGraph.direct(traversal), pathWithoutExt);
         } catch (Exception e) {
             LOGGER.info("Bean graph creation failed", e);
         } finally {
@@ -58,33 +65,37 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
         }
     }
 
-    private void exportBeanGraph(BeanGraph beanGraph, String path) {
+    private void exportBeanGraph(DirectedBeanGraph beanGraph, String path) {
         try {
-            Map<String, BeanNode> rootNodes = beanGraph.getRootNodes(traversal);
-
-            List<Node> nodes = rootNodes.values().stream()
-                    .map(this::convert)
-                    .peek(node -> node.with(Color.CADETBLUE))
-                    .collect(Collectors.toList());
-
-            Graph graph = graph("Spring Beans").directed();
-            for (Node node : nodes) {
-                graph = graph.with(node);
-            }
-
-            int maxDepth = rootNodes.values().stream().mapToInt(traversal::getDepth).max().orElse(0);
-            int width = rootNodes.values().stream().map(BeanNode::getName).mapToInt(name -> name.length() + 4).sum();
-
-            Format format = Format.SVG;
-            Graphviz.fromGraph(graph)
-                    .height(maxDepth * 20)
-                    .width(width)
-                    .render(format)
-                    .toFile(Paths.get(path + "." + format.name()).toAbsolutePath().toFile());
+            Path nioPath = Paths.get(path + "." + SVG.name()).toAbsolutePath();
+            render(beanGraph, SVG).toFile(nioPath.toFile());
         } catch (IOException e) {
             LOGGER.error("Failed to write file at=" + path, e);
         }
     }
+
+    private Renderer render(DirectedBeanGraph beanGraph, Format format) {
+        return toGraphViz(beanGraph).render(format);
+    }
+
+    private Graphviz toGraphViz(DirectedBeanGraph beanGraph) {
+        Collection<BeanNode> rootNodes = beanGraph.getRootNodes().values();
+
+        List<Node> nodes = rootNodes.stream()
+                .map(this::convert)
+                .collect(Collectors.toList());
+
+        Graph graph = graph("Spring Beans").directed()
+                .with(nodes);
+
+        int maxDepth = beanGraph.getDepth();
+        int width = beanGraph.getWidth();
+
+        return Graphviz.fromGraph(graph)
+                .height(maxDepth * 20)
+                .width(width);
+    }
+
 
     private Node convert(BeanNode beanNode) {
         Node node = node(beanNode.getName()).with(Label.html(toHtml(beanNode)));
@@ -120,7 +131,7 @@ public class GraphVizService implements ApplicationListener<ContextRefreshedEven
         return ObjectUtils.isEmpty(values) ? null : values[values.length - 1];
     }
 
-    public void setTraversal(BeanGraph.Traversal traversal) {
+    public void setTraversal(Traversal traversal) {
         this.traversal = traversal;
     }
 }

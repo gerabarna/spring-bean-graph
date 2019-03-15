@@ -33,4 +33,14 @@ public class DirectedBeanGraph {
     public Traversal getTraversal() {
         return traversal;
     }
+
+    @Override
+    public String toString() {
+        return "DirectedBeanGraph{" +
+                "traversal=" + traversal +
+                ", rootNodeCount=" + rootNodes.size() +
+                ", depth=" + getDepth() +
+                ", =" + getDepth() +
+                '}';
+    }
 }

@@ -10,128 +10,119 @@ import org.springframework.jmx.export.annotation.ManagedOperationParameter;
 import org.springframework.jmx.export.annotation.ManagedOperationParameters;
 import org.springframework.jmx.export.annotation.ManagedResource;
 import org.springframework.stereotype.Service;
-import org.springframework.util.ObjectUtils;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
+
+import javax.annotation.PostConstruct;
 
 import guru.nidi.graphviz.attribute.Color;
-import guru.nidi.graphviz.attribute.Label;
 import guru.nidi.graphviz.attribute.Style;
-import guru.nidi.graphviz.engine.Format;
-import guru.nidi.graphviz.engine.Graphviz;
 import guru.nidi.graphviz.engine.Renderer;
-import guru.nidi.graphviz.model.Graph;
-import guru.nidi.graphviz.model.Node;
-import hu.gerab.spring.bean.graph.BeanGraph;
 import hu.gerab.spring.bean.graph.BeanGraphService;
 import hu.gerab.spring.bean.graph.BeanNode;
 import hu.gerab.spring.bean.graph.DirectedBeanGraph;
-import hu.gerab.spring.bean.graph.Traversal;
-
-import static guru.nidi.graphviz.engine.Format.SVG;
-import static guru.nidi.graphviz.model.Factory.graph;
-import static guru.nidi.graphviz.model.Factory.node;
+import hu.gerab.spring.bean.graph.utils.BeanNodePredicates;
 
 @Service
 @ManagedResource(objectName = "hu.gerab:name=GraphVizService")
 public class GraphVizService implements ApplicationListener<ContextRefreshedEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BeanGraphService.class);
-    public Traversal traversal = Traversal.DEPENDENT_TO_DEPENDENCY;
 
     @Autowired
     private BeanGraphService beanGraphService;
 
+    @Autowired(required = false)
+    private volatile GraphVizBeanGraphConfiguration configuration;
+
+    public static GraphVizBeanGraphConfiguration createDefaultConfiguration() {
+        GraphVizBeanGraphConfiguration configuration = new GraphVizFileBeanGraphConfiguration();
+
+        configuration.excludePackages("org.springframework", "hu.gerab.spring");
+
+        configuration.addNodeStyle(BeanNode::isPrototype, Color.LIGHTGRAY);
+        configuration.addNodeStyle(BeanNode::isLazyInit, Style.DOTTED);
+
+        configuration.addHtml(BeanNodePredicates::acceptAll
+                , (node, sb) -> sb.append("<b>").append(node.getName()).append("</b>"));
+        configuration.addHtml((BeanNode node) -> !node.getSimpleClassName().equalsIgnoreCase(node.getName())
+                , (node, sb) -> sb.append("<br/>").append(node.getSimpleClassName()));
+        return configuration;
+    }
+
+    @PostConstruct
+    public void init() {
+        if (configuration == null) {
+            configuration = createDefaultConfiguration();
+        }
+    }
+
     public void onApplicationEvent(ContextRefreshedEvent event) {
-        createGraph("springBeans");
+        if (configuration instanceof GraphVizFileBeanGraphConfiguration) {
+            GraphVizFileBeanGraphConfiguration fileConfiguration = (GraphVizFileBeanGraphConfiguration) this.configuration;
+            if (fileConfiguration.isAutoCreateAfterStartup()) {
+                Path path = fileConfiguration.getPath();
+                try {
+                    createGraphFile(path);
+                    LOGGER.info("Finished writing bean graph file at={}", path);
+                } catch (IOException e) {
+                    LOGGER.error("Failed to write file at=" + path, e);
+                }
+            }
+        }
     }
 
     @ManagedOperation
-    @ManagedOperationParameters({@ManagedOperationParameter(name = "pathWithoutExt", description = "the (relative/absolute) path to the generated png file without extension")})
-    public void createGraph(String pathWithoutExt) {
-        try {
-            LOGGER.info("Creating bean graph...");
-            BeanGraph beanGraph = beanGraphService.getBeanGraph("org.springframework", "hu.gerab.spring");
-            exportBeanGraph(beanGraph.direct(traversal), pathWithoutExt);
-        } catch (Exception e) {
-            LOGGER.info("Bean graph creation failed", e);
-        } finally {
-            LOGGER.info("Bean graph process finished.");
-        }
+    @ManagedOperationParameters({@ManagedOperationParameter(name = "path", description = "the (relative/absolute) path to the generated file")})
+    public void createGraph(String path) throws IOException {
+        Path nioPath = Paths.get(path).toAbsolutePath();
+        createGraphFile(nioPath);
     }
 
-    private void exportBeanGraph(DirectedBeanGraph beanGraph, String path) {
-        try {
-            Path nioPath = Paths.get(path + "." + SVG.name()).toAbsolutePath();
-            render(beanGraph, SVG).toFile(nioPath.toFile());
-        } catch (IOException e) {
-            LOGGER.error("Failed to write file at=" + path, e);
-        }
+    public void createGraphFile(Path path) throws IOException {
+        createGraphFile(path, configuration);
     }
 
-    private Renderer render(DirectedBeanGraph beanGraph, Format format) {
-        return toGraphViz(beanGraph).render(format);
+    public void createGraphFile(Path path, GraphVizBeanGraphConfiguration beanGraphConfiguration) throws IOException {
+        render(beanGraphConfiguration).toFile(path.toFile());
     }
 
-    private Graphviz toGraphViz(DirectedBeanGraph beanGraph) {
-        Collection<BeanNode> rootNodes = beanGraph.getRootNodes().values();
-
-        List<Node> nodes = rootNodes.stream()
-                .map(this::convert)
-                .collect(Collectors.toList());
-
-        Graph graph = graph("Spring Beans").directed()
-                .with(nodes);
-
-        int maxDepth = beanGraph.getDepth();
-        int width = beanGraph.getWidth();
-
-        return Graphviz.fromGraph(graph)
-                .height(maxDepth * 20)
-                .width(width);
+    @ManagedOperation
+    public BufferedImage createGraphImage() {
+        return createGraphImage(configuration);
     }
 
-
-    private Node convert(BeanNode beanNode) {
-        Node node = node(beanNode.getName()).with(Label.html(toHtml(beanNode)));
-
-        if (beanNode.isPrototype()) {
-            node = node.with(Color.LIGHTGRAY);
-        }
-
-        if (beanNode.isLazyInit()) {
-            node = node.with(Style.DOTTED);
-        }
-
-        for (BeanNode dependent : traversal.getChildren(beanNode)) {
-            node = node.link(convert(dependent));
-        }
-
-        return node;
+    public BufferedImage createGraphImage(GraphVizBeanGraphConfiguration beanGraphConfiguration) {
+        return render(beanGraphConfiguration).toImage();
     }
 
-
-    public String toHtml(BeanNode node) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<b>").append(node.getName()).append("</b>");
-
-        String simpleName = last(node.getBeanClassName().split("\\."));
-        if (simpleName != null && !simpleName.equalsIgnoreCase(node.getName())) {
-            sb.append("<br/>").append(simpleName);
-        }
-        return sb.toString();
+    @ManagedOperation
+    public String createGrphString() {
+        return createGrphString(configuration);
     }
 
-    public static <T> T last(T[] values) {
-        return ObjectUtils.isEmpty(values) ? null : values[values.length - 1];
+    public String createGrphString(GraphVizBeanGraphConfiguration beanGraphConfiguration) {
+        return render(beanGraphConfiguration).toString();
     }
 
-    public void setTraversal(Traversal traversal) {
-        this.traversal = traversal;
+    public void createGrphStream(OutputStream os) throws IOException {
+        createGrphStream(os, configuration);
+    }
+
+    public void createGrphStream(OutputStream os, GraphVizBeanGraphConfiguration beanGraphConfiguration) throws IOException {
+        render(beanGraphConfiguration).toOutputStream(os);
+    }
+
+    private Renderer render(GraphVizBeanGraphConfiguration beanGraphConfiguration) {
+        DirectedBeanGraph beanGraph = beanGraphService.getBeanGraph(beanGraphConfiguration);
+        return beanGraphConfiguration.render(beanGraph);
+    }
+
+    private GraphVizBeanGraphConfiguration getConfiguration() {
+        return configuration;
     }
 }

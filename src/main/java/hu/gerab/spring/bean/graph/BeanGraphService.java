@@ -13,10 +13,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
+
+import hu.gerab.spring.bean.graph.utils.BeanNodePredicates;
 
 @Service
 @ManagedResource(objectName = "hu.gerab:name=BeanGraphService")
@@ -30,29 +30,22 @@ public class BeanGraphService implements ApplicationContextAware {
         this.applicationContext = applicationContext;
     }
 
-    private static <T> boolean acceptAll(T t) {
-        return true;
-    }
-
-    private static <T> boolean rejectAll(T t) {
-        return false;
-    }
-
-    public BeanGraph getBeanGraph(String... excludingPackages) {
-        List<Predicate<BeanNode>> predicates = Arrays.stream(excludingPackages)
-                .map(packageFilter -> packageFilter.replace(".", "\\."))
-                .map(packageFilter -> (Predicate<BeanNode>) ((BeanNode node) -> node.getBeanClassName().matches(".*" + packageFilter + ".*")))
-                .collect(Collectors.toList());
-        return getBeanGraphExcluding(predicates.toArray((Predicate<BeanNode>[]) new Predicate[predicates.size()]));
-    }
-
-    public BeanGraph getBeanGraphExcluding(Predicate<BeanNode>... excludes) {
+    public BeanGraph getBeanGraph(Predicate<BeanNode>... excludes) {
         Predicate<BeanNode> exclude = Arrays.stream(excludes)
-                .reduce(BeanGraphService::rejectAll, Predicate::or);
-        return getBeanGraph(exclude, BeanGraphService::rejectAll);
+                .reduce(BeanNodePredicates::rejectAll, Predicate::or);
+        return getBeanGraph(exclude);
+    }
+
+    public BeanGraph getBeanGraph(Predicate<BeanNode> exclude) {
+        return getBeanGraph(exclude, BeanNodePredicates::rejectAll);
+    }
+
+    public BeanGraph getBeanGraph() {
+        return getBeanGraph(BeanNodePredicates::rejectAll, BeanNodePredicates::rejectAll);
     }
 
     public BeanGraph getBeanGraph(Predicate<BeanNode> exclude, Predicate<BeanNode> include) {
+        LOGGER.info("Creating bean graph...");
         String[] beanDefinitionNames = applicationContext.getBeanDefinitionNames();
         //TODO classcastEx
         ConfigurableListableBeanFactory beanFactory = ((AbstractApplicationContext) applicationContext).getBeanFactory();
@@ -81,7 +74,15 @@ public class BeanGraphService implements ApplicationContextAware {
             }
         }
 
-        return new BeanGraph(beanNameToNodeMap);
+        BeanGraph graph = new BeanGraph(beanNameToNodeMap);
+        LOGGER.info("Bean Graph generation finished, found {} nodes, out of {} beanDefinitions."
+                , beanNameToNodeMap.size(), beanDefinitionNames.length);
+        return graph;
+    }
+
+    public DirectedBeanGraph getBeanGraph(BeanGraphConfiguration configuration) {
+        return getBeanGraph(configuration.getExcludeNode(), configuration.getIncludeNode())
+                .direct(configuration.getTraversal());
     }
 
     private void addDependency(BeanNode dependent, BeanNode dependency) {

@@ -35,7 +35,7 @@ public class BeanGraph {
     }
 
     public static int getWidth(Map<String, BeanNode> rootNodes) {
-        return rootNodes.values().stream().map(BeanNode::getName).mapToInt(name -> name.length() + 4).sum();
+        return rootNodes.values().size();
     }
 
     public int getDepth(Traversal traversal) {
@@ -48,5 +48,12 @@ public class BeanGraph {
 
     public DirectedBeanGraph direct(Traversal traversal) {
         return new DirectedBeanGraph(this, traversal);
+    }
+
+    @Override
+    public String toString() {
+        return "BeanGraph{" +
+                "beanNameToNodeMap.size=" + beanNameToNodeMap.size() +
+                '}';
     }
 }

@@ -10,7 +10,7 @@ public interface Traversal {
     Collection<BeanNode> getChildren(BeanNode parent);
 
     default int getDepth(BeanNode root) {
-        return getChildren(root).stream().mapToInt(this::getDepth).max().orElse(0);
+        return getChildren(root).stream().mapToInt(this::getDepth).max().orElse(0) + 1;
     }
 
     default Traversal invert() {

@@ -1,7 +1,6 @@
 package hu.gerab.spring.bean.graph.graphviz;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
@@ -28,6 +27,7 @@ import static hu.gerab.spring.bean.graph.utils.BeanNodePredicates.toPackagePredi
 public class GraphVizBeanGraphConfiguration implements BeanGraphConfiguration {
 
     private class Conditional<T> implements Predicate<BeanNode> {
+
         protected Predicate<BeanNode> predicate;
         protected T target;
 
@@ -67,19 +67,10 @@ public class GraphVizBeanGraphConfiguration implements BeanGraphConfiguration {
     private String title = "Spring Beans";
 
     public Renderer render(DirectedBeanGraph beanGraph) {
-        Collection<BeanNode> rootNodes = beanGraph.getRootNodes().values();
-
-        List<String> visitedNodes = new ArrayList<>();
-        List<Node> nodes = rootNodes.stream()
-                .map(node -> convert(node, visitedNodes))
-                .collect(Collectors.toList());
-
-        Graph graph = graph(title).directed()
-                .with(nodes);
+        Graph graph = toGraph(beanGraph);
 
         int maxDepth = beanGraph.getDepth();
-        int width = rootNodes.stream()
-                .map(BeanNode::getName)
+        int width = beanGraph.getRootNodes().keySet().stream()
                 .mapToInt(name -> name.length() + 4)
                 .sum();
 
@@ -87,6 +78,16 @@ public class GraphVizBeanGraphConfiguration implements BeanGraphConfiguration {
                 .height(maxDepth * 20)
                 .width(width)
                 .render(format);
+    }
+
+    protected Graph toGraph(DirectedBeanGraph beanGraph) {
+        List<String> visitedNodes = new ArrayList<>();
+        List<Node> nodes = beanGraph.getRootNodes().values().stream()
+                .map(node -> convert(node, visitedNodes))
+                .collect(Collectors.toList());
+
+        return graph(title).directed()
+                .with(nodes);
     }
 
 
@@ -121,7 +122,7 @@ public class GraphVizBeanGraphConfiguration implements BeanGraphConfiguration {
 
     protected String toHtml(BeanNode node) {
         StringBuilder sb = new StringBuilder();
-        
+
         for (ConditionalHtml conditionalHtml : conditionalHtmls) {
             if (conditionalHtml.test(node)) {
                 conditionalHtml.target.accept(node, sb);

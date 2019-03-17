@@ -8,7 +8,6 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.support.AbstractApplicationContext;
-import org.springframework.jmx.export.annotation.ManagedResource;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -19,7 +18,6 @@ import java.util.function.Predicate;
 import hu.gerab.spring.bean.graph.utils.BeanNodePredicates;
 
 @Service
-@ManagedResource(objectName = "hu.gerab:name=BeanGraphService")
 public class BeanGraphService implements ApplicationContextAware {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BeanGraphService.class);
